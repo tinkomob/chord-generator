@@ -1,0 +1,7 @@
+Source: https://github.com/ldrolez/free-midi-chords
+Archive: free-midi-progressions-20260914.zip
+195 plain C-key MIDI progressions; note events retained, other keys and rhythm variants omitted as duplicates for scale-adaptive playback.
+
+Additional source: https://github.com/BenLeon2001/Free-Chord-Progressions
+3649 additional progressions; transposed duplicates and single-chord files excluded. Original rhythms and voices retained, normalized relative to first bass for Live scale adaptation.
+The author README permits royalty-free use in personal and commercial projects without attribution; see progression-sources/BenLeon2001-README.md.
