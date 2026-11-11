@@ -1,6 +1,6 @@
 from pathlib import Path
-import zipfile,struct,json
-z=zipfile.ZipFile(Path('progression-sources/free-midi-progressions-20260914.zip'))
+import zipfile, json, re
+
 def parse(data):
  assert data[:4]==b'MThd';division=int.from_bytes(data[12:14],'big');assert division<32768
  pos=8+int.from_bytes(data[4:8],'big');notes=[];end=0
@@ -31,14 +31,14 @@ def parse(data):
   assert not any(active.values())
  assert notes and end>0
  return sorted(notes,key=lambda n:(n[1],n[0])),end
+
+z=zipfile.ZipFile(Path('progression-sources/free-midi-progressions-20260914.zip'))
 bank=[]
 for name in sorted(z.namelist()):
  if name.endswith('.mid') and '/C - ' in name and name.count('/')==1:
   notes,end=parse(z.read(name));mode=name.split('/')[0];title=name.split('C - ',1)[1][:-4]
   bank.append({'name':mode+' / '+title,'source':name,'notes':notes,'length':end})
 assert len(bank)==195
-# Normalize MIDI notes relative to the first bass to remove transposed duplicates.
-import re
 stats={'files':0,'duplicates':0,'single_chords':0,'added':0}
 def signature(notes):
  base=min(n[0] for n in notes if n[1]==notes[0][1]);offset=notes[0][1]
@@ -57,18 +57,13 @@ for archive in sorted(Path('progression-sources').glob('*.zip')):
   seen.add(sig)
   base=min(n[0] for n in notes if n[1]==notes[0][1]);offset=notes[0][1]
   normalized=[[n[0]-base+48,n[1]-offset,n[2],n[3]] for n in notes]
-  tokens=re.findall(r'(?<![A-Za-z])([b#]?[ivIV]+(?:[0-9]+|sus[24]|add[0-9]+|dim|aug|[?])?)(?=_| |$)',Path(name).stem)
-  if len(tokens)<2:
+  tokens=re.findall(r'(?<![A-Za-z])([b#]?[ivIV]+(?:[0-9]+|sus[24]|add[0-9]+|dim|aug|[\u00b0\u00f8?])?)(?=_| |$)',Path(name).stem)
+  if len(tokens)!=len({n[1] for n in notes}):
    degrees=['I','bII','II','bIII','III','IV','bV','V','bVI','VI','bVII','VII'];tokens=[]
    for time in sorted({n[1] for n in notes}):
     chord=min(n[0] for n in notes if n[1]==time);tokens.append(degrees[(chord-base)%12])
-  title=' '.join(tokens)
-  bank.append({'name':'BenLeon / '+title,'source':archive.name+' / '+name,'notes':normalized,'length':end-offset})
+  bank.append({'name':'BenLeon / '+' '.join(tokens),'source':archive.name+' / '+name,'notes':normalized,'length':end-offset})
   stats['added']+=1
 print(json.dumps(stats), 'total',len(bank))
-Path('chord_progressions.js').write_text('var progressionBank = '+json.dumps(bank,separators=(',',':'))+';\n')
+Path('chord_progressions.js').write_text('var progressionBank = '+json.dumps(bank,separators=(',',':'))+';\n',encoding='utf-8')
 Path('chord-progressions-LICENSE.txt').write_bytes(z.read('LICENSE'))
-Path('chord-progressions-SOURCE.txt').write_text('Source: https://github.com/ldrolez/free-midi-chords\nArchive: free-midi-progressions-20260914.zip\n195 plain C-key MIDI progressions; note events retained, other keys and rhythm variants omitted as duplicates for scale-adaptive playback.\n')
-
-with Path('chord-progressions-SOURCE.txt').open('a') as out:
- out.write('\nAdditional source: https://github.com/BenLeon2001/Free-Chord-Progressions\n'+str(stats['added'])+' additional progressions; transposed duplicates and single-chord files excluded. Original rhythms and voices retained, normalized relative to first bass for Live scale adaptation.\nThe author README permits royalty-free use in personal and commercial projects without attribution; see progression-sources/BenLeon2001-README.md.\n')

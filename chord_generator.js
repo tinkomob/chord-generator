@@ -3,7 +3,7 @@ inlets = 2;
 outlets = 2;
 include("chord_progressions.js");
 var generatorPage=["patternlabel", "segments", "density", "register", "strum", "velocity", "gate", "octaveslabel", "strumlabel", "velocitylabel", "gatelabel", "segmentscaption", "densitycaption", "registercaption", "rootlabel", "segmentsreadout", "densityreadout", "registerreadout", "motion", "motionlabel", "rootdisplayselect", "octavesselect", "patternselect", "progressionbutton"];
-var progressionPage=["browse", "searchplaceholder", "searchinput", "backbutton", "shufflebutton", "tile0", "tile1", "tile2", "tile3", "tile4", "tile5", "tile6", "tile7", "tile8", "tile9"];
+var progressionPage=["browse", "chordcount", "searchplaceholder", "searchinput", "backbutton", "shufflebutton", "tile0", "tile1", "tile2", "tile3", "tile4", "tile5", "tile6", "tile7", "tile8", "tile9"];
 var context = {};
 var settings = {progressionMode:0, preset:0, motion:0, start:0, rate:1, pattern:0, octaves:3, variation:35, register:4, gate:100, segments:4, density:100, inversion:0, spread:0, strum:0, velocity:20,  direction:0};
 var result = new Dict();
@@ -15,22 +15,32 @@ function dictionary(name) {
 }
 function rate(v) { parameterChange = true; settings.rate = Math.max(0,Math.min(3,Math.round(v))); }
 function pattern(v) { parameterChange = true; settings.pattern = Math.max(0,Math.min(3,Math.round(v))); }
-function octaves(v) { parameterChange = true; settings.octaves = Math.max(2,Math.min(6,Math.round(v)+2)); }
+function octaves(v) { settings.progressionMode=0; parameterChange = true; settings.octaves = Math.max(2,Math.min(6,Math.round(v)+2)); }
 function variation(v) { parameterChange = true; settings.variation = Math.max(0,Math.min(100,v)); }
-function register(v) { parameterChange = true; settings.register = Math.max(0,Math.min(8,Math.round(v))); }
+function register(v) { settings.progressionMode=0; parameterChange = true; settings.register = Math.max(0,Math.min(8,Math.round(v))); }
 function gate(v) { parameterChange = true; settings.gate = Math.max(10,Math.min(100,v)); }
-function segments(v) { if (!isFinite(v)) return; parameterChange=true; settings.segments=Math.max(1,Math.min(16,Math.round(v))); }
-function density(v) { if (!isFinite(v)) return; parameterChange=true; settings.density=Math.max(0,Math.min(100,Math.round(v))); }
+function segments(v) { settings.progressionMode=0; if (!isFinite(v)) return; parameterChange=true; settings.segments=Math.max(1,Math.min(16,Math.round(v))); }
+function density(v) { settings.progressionMode=0; if (!isFinite(v)) return; parameterChange=true; settings.density=Math.max(0,Math.min(100,Math.round(v))); }
 function inversion(v) { if (!isFinite(v)) return; parameterChange=true; settings.inversion=Math.max(0,Math.min(5,Math.round(v))); }
 function spread(v) { if (!isFinite(v)) return; parameterChange=true; settings.spread=Math.max(0,Math.min(3,Math.round(v))); }
 function strum(v) { if (!isFinite(v)) return; parameterChange=true; settings.strum=Math.max(-100,Math.min(100,Math.round(v))); }
 function velocity(v) { if (!isFinite(v)) return; parameterChange=true; settings.velocity=Math.max(0,Math.min(100,Math.round(v))); }
 function direction(v) { if (!isFinite(v)) return; parameterChange=true; settings.direction=Math.max(0,Math.min(3,Math.round(v))); }
-function start(v) { if (!isFinite(v)) return; parameterChange=true; settings.start=Math.max(0,Math.min(11,Math.round(v))); }
+function start(v) { settings.progressionMode=0; if (!isFinite(v)) return; parameterChange=true; settings.start=Math.max(0,Math.min(11,Math.round(v))); }
 function motion(v) { if (!isFinite(v)) return; parameterChange=true; settings.motion=Math.max(0,Math.min(100,v)); }
 function preset(v) { if (!isFinite(v)) return; parameterChange=true; settings.progressionMode=1; settings.preset=Math.max(0,Math.min(progressionBank.length-1,Math.round(v))); if(searchMatches) this.patcher.getnamed("browse").message("set",searchMatches.indexOf(settings.preset)); }
-var tileChoices=[], searchQuery="", searchMatches=null, visiblePage=0, beforeSearchTiles=null;
+var tileChoices=[], searchQuery="", searchMatches=null, visiblePage=0, beforeSearchTiles=null, filterCount=4;
 function roman(index) { return progressionBank[index].name.split(' / ')[1].split(' - ')[0]; }
+function chordcount(v) {
+    if(!isFinite(v)) return;
+    var count=Math.max(1,Math.min(32,Math.round(v)));
+    if(count===filterCount) return;
+    var query=searchQuery;
+    filterCount=count; searchMatches=null; searchQuery=''; tileChoices=[];beforeSearchTiles=null;
+    search.call(this);
+    if(query) search.call(this,query);
+}
+function matchescount(index) {return roman(index).split(/\s+/).length===filterCount;}
 function search() {
     var query=arrayfromargs(arguments).join(' ').replace(/^\s+|\s+$/g,'').replace(/\s+/g,' ').toLowerCase();
     if(query==='bang' || query==='""') query='';
@@ -40,7 +50,7 @@ function search() {
     searchQuery=query;
     searchMatches=[];
     var menu=this.patcher.getnamed('browse');menu.message('clear');
-    for(var i=0;i<progressionBank.length;i++) if(!searchQuery || (' '+roman(i).toLowerCase()+' ').indexOf(' '+searchQuery+' ')>=0) searchMatches.push(i);
+    for(var i=0;i<progressionBank.length;i++) if(matchescount(i) && (!searchQuery || (' '+roman(i).toLowerCase()+' ').indexOf(' '+searchQuery+' ')>=0)) searchMatches.push(i);
     if(searchQuery) searchMatches.sort(function(a,b) {
         var aa=roman(a).toLowerCase(),bb=roman(b).toLowerCase();
         return (aa===searchQuery?0:1)-(bb===searchQuery?0:1) || aa.length-bb.length || a-b;
@@ -68,7 +78,7 @@ function shuffle(ordered) {
     for(var k=0;k<candidates.length;k++) {
         var i=candidates[k], name=roman(i);
         // Long formulas remain available in the top selector; grid buttons fit short formulas.
-        if((name.length<=17 || (searchQuery && name.toLowerCase()===searchQuery)) && !seen[name]) { available.push(i);seen[name]=true; }
+        if(matchescount(i) && (name.length<=17 || (searchQuery && name.toLowerCase()===searchQuery)) && !seen[name]) { available.push(i);seen[name]=true; }
     }
     if(!ordered) for(i=available.length-1;i>0;i--) { var j=Math.floor(Math.random()*(i+1)),tmp=available[i];available[i]=available[j];available[j]=tmp; }
     tileChoices=available.slice(0,10);
@@ -225,9 +235,13 @@ function generate(c, s, random) {
     }
     return notes;
 }
+function requestdone() { parameterChange=false; }
 function bang() {
     // Live supplies loop bounds as the time range when there is no time selection.
-    if (!parameterChange) phraseSeed = Math.floor(Math.random()*2147483646)+1;
+    if (!parameterChange) {
+        if (!visiblePage) settings.progressionMode=0;
+        phraseSeed = Math.floor(Math.random()*2147483646)+1;
+    }
     parameterChange = false;
     var state = phraseSeed;
     function phraseRandom() { state = state * 16807 % 2147483647; return (state-1)/2147483646; }

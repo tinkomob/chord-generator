@@ -148,12 +148,12 @@ for(let preset=195;preset<s.progressionBank.length;preset++){
 }
 console.log('Passed every added BenLeon preset: custom scale, Start bass, MIDI bounds and offset range.');
 const events=[];s.patcher={message(){},getnamed(name){return {message(...args){events.push([name,...args]);if(name==='preset'&&args[0]==='int')s.preset(args[1]);}}}};
-s.searchMatches=null;s.search();assert.equal(s.searchMatches.length,s.progressionBank.length);assert.equal(events.filter(e=>e[0]==='browse'&&e[1]==='append').length,s.progressionBank.length);
+s.searchMatches=null;s.search();assert.equal(s.searchMatches.length,s.progressionBank.filter((e,i)=>s.matchescount(i)).length);assert.equal(events.filter(e=>e[0]==='browse'&&e[1]==='append').length,s.progressionBank.filter((e,i)=>s.matchescount(i)).length);
 const selectedBefore=s.settings.preset;s.search('I V vi IV');assert(s.searchMatches.length>0&&s.searchMatches.length<s.progressionBank.length);assert.equal(s.settings.preset,selectedBefore);
 for(const i of s.searchMatches)assert(s.roman(i).toLowerCase().includes('i v vi iv'));
 const expected=s.searchMatches[0];s.browse(0);assert.equal(s.settings.preset,expected);
 s.search('nothing-matches-this');assert.equal(s.searchMatches.length,0);assert.equal(s.tileChoices.length,0);s.browse(0);assert.equal(s.settings.preset,expected);
-s.search('');assert.equal(s.searchMatches.length,s.progressionBank.length);s.browse(s.searchMatches.length-1);assert.equal(s.settings.preset,s.progressionBank.length-1);
+s.search('');assert.equal(s.searchMatches.length,s.progressionBank.filter((e,i)=>s.matchescount(i)).length);const lastMatch=s.searchMatches[s.searchMatches.length-1];s.browse(s.searchMatches.length-1);assert.equal(s.settings.preset,lastMatch);
 console.log('Passed full library availability, search filtering/reset/no matches and filtered-to-original preset mapping.');
 
 s.search('');const initialTiles=Array.from(s.tileChoices);s.search('I');s.search('I V');s.search('I V vi');s.search('');assert.deepEqual(Array.from(s.tileChoices),initialTiles);
@@ -161,12 +161,63 @@ s.visiblePage=1;events.length=0;s.search('ii V');assert(events.some(e=>e[0]==='s
 assert(!ui.searchlabel);assert.equal(ui.searchplaceholder.ignoreclick,1);assert(p.lines.some(({patchline:l})=>l.source[0]==='searchinput'&&l.source[1]===1&&l.destination[0]==='searchdefer'));
 console.log('Passed search-as-you-type wiring, placeholder visibility and exact pre-search tile restoration.');
 
-s.search('');const restored=Array.from(s.tileChoices);s.search('I V vi');s.search('bang');assert.equal(s.searchQuery,'');assert.deepEqual(Array.from(s.tileChoices),restored);assert.equal(s.searchMatches.length,s.progressionBank.length);
+s.search('');const restored=Array.from(s.tileChoices);s.search('I V vi');s.search('bang');assert.equal(s.searchQuery,'');assert.deepEqual(Array.from(s.tileChoices),restored);assert.equal(s.searchMatches.length,s.progressionBank.filter((e,i)=>s.matchescount(i)).length);
 s.search('I V');s.search('""');assert.equal(s.searchQuery,'');assert.deepEqual(Array.from(s.tileChoices),restored);
 console.log('Passed Max empty text bang/empty-symbol reset and exact original set restoration.');
-s.search('');s.search('I IV iii');assert.equal(s.roman(s.tileChoices[0]).toLowerCase(),'i iv iii');
-for(const i of s.searchMatches)assert((' '+s.roman(i).toLowerCase()+' ').includes(' i iv iii '));
+const exactThree=s.roman(s.progressionBank.findIndex((p,i)=>s.roman(i).split(/\s+/).length===3 && s.roman(i).length<=17));
+s.chordcount(3);s.search('');s.search(exactThree);assert.equal(s.roman(s.tileChoices[0]).toLowerCase(),exactThree.toLowerCase());
+for(const i of s.searchMatches)assert((' '+s.roman(i).toLowerCase()+' ').includes(' '+exactThree.toLowerCase()+' '));
 const exactIndex=s.tileChoices[0];const pos=s.searchMatches.indexOf(exactIndex);s.browse(pos);assert.equal(s.settings.preset,exactIndex);
 assert.equal(s.settings.progressionMode,1);
-s.search('I IV iii');assert.equal(s.tileChoices[0],exactIndex);
+s.search(exactThree);assert.equal(s.tileChoices[0],exactIndex);
 console.log('Passed whole-degree search, exact match first, stable result tiles and applying exact search result.');
+for(const [name,value] of [['start',0],['octaves',1],['segments',4],['density',100],['register',4]]){
+ s.preset(12);s.page(0);s[name](value);assert.equal(s.settings.progressionMode,0,name+' must return to random generation');
+}
+for(const [name,value] of [['strum',30],['motion',30],['velocity',50],['pattern',1],['gate',80]]){
+ s.preset(12);s.page(0);s[name](value);assert.equal(s.settings.progressionMode,1,name+' must still edit the selected progression');
+}
+s.result={parse(){}};s.context=context;
+s.preset(12);s.page(0);s.parameterChange=false;s.bang();assert.equal(s.settings.progressionMode,0);
+s.preset(12);s.page(1);s.parameterChange=false;s.bang();assert.equal(s.settings.progressionMode,1);
+console.log('Passed generator controls and Generate resetting preset mode on main page, modifier edits retaining it, and Back remaining non-generative.');
+s.preset(12);s.page(0);s.strum(50);assert(s.parameterChange);s.requestdone();s.bang();assert.equal(s.settings.progressionMode,0);
+console.log('Passed manual Generate after an unapplied Auto-off modifier edit.');
+s.search('');const filterPreset=s.settings.preset,filterSeed=s.phraseSeed;s.parameterChange=false;
+for(const count of [3,4,6,8]){
+ s.chordcount(count);s.search('');
+ const expected=s.progressionBank.map((e,i)=>i).filter(i=>s.roman(i).split(/\s+/).length===count);
+ assert.deepEqual(Array.from(s.searchMatches),Array.from(expected));
+ for(const i of s.tileChoices)assert.equal(s.roman(i).split(/\s+/).length,count);
+ const initial=Array.from(s.tileChoices);s.search('I V');s.search('');assert.deepEqual(Array.from(s.tileChoices),initial);
+}
+assert.equal(s.settings.preset,filterPreset);assert.equal(s.phraseSeed,filterSeed);assert.equal(s.parameterChange,false);
+assert.equal(ui.chordcount.saved_attribute_attributes.valueof.parameter_initial[0],4);
+assert(ui.browse.presentation_rect[0]+ui.browse.presentation_rect[2]<=ui.chordcount.presentation_rect[0]);
+assert(ui.chordcount.presentation_rect[0]+ui.chordcount.presentation_rect[2]<=ui.shufflebutton.presentation_rect[0]);
+console.log('Passed exact chord counts 3/4/6/8 across selector, search and tiles; search reset, no generation side effects and header spacing.');
+
+
+for(const p of s.progressionBank.slice(195))assert.equal(p.name.split(' / ')[1].split(/\s+/).length,new Set(p.notes.map(n=>n[1])).size,p.source);
+console.log('Passed imported label counts matching actual chord onsets.');
+
+
+const voiceUI={jsarguments:['chord_select.js','voice',0],mgraphics:{init(){},redraw(){}},box:{getattr(){return this.rect.slice();},rect:[115,115,34,13],message(_, ...r){this.rect=r;},varname:'patternselect'},patcher:{message(){}},outlet(){}};
+vm.createContext(voiceUI);vm.runInContext(fs.readFileSync('chord_select.js','utf8'),voiceUI);
+voiceUI.onclick(2,2);assert.deepEqual(voiceUI.box.rect,[101,59,48,69]);
+voiceUI.close();assert.deepEqual(voiceUI.box.rect,[115,115,34,13]);assert.equal(voiceUI.width,34);
+console.log('Passed expanded Voice width, viewport bounds and closed field restoration.');
+
+for(const key of ['start','size','voice']){
+ let rect=key==='voice'?[115,115,34,13]:[30,3,42,14],emitted=[];
+ const u={jsarguments:['chord_select.js',key,0],mgraphics:{init(){},redraw(){}},box:{getattr(){return rect.slice();},message(_, ...r){rect=r;},varname:key},patcher:{message(){}},outlet(_,v){emitted.push(v);}};
+ vm.createContext(u);vm.runInContext(fs.readFileSync('chord_select.js','utf8'),u);
+ const home=rect.slice();u.onclick(2,2);
+ const y=(u.above?0:u.height)+u.row+1;
+ u.onidle(2,y);assert.equal(u.hovered,1);assert.equal(u.value,0);assert.equal(emitted.length,0);
+ u.onidleout();assert.equal(u.hovered,-1);assert(u.opened);
+ u.onidle(2,y);u.onblur();assert(!u.opened);assert.equal(u.hovered,-1);assert.deepEqual(rect,home);assert.equal(emitted.length,0);
+ u.onclick(2,2);u.onidle(2,y);u.onclick(2,y);assert.deepEqual(emitted,[1]);assert(!u.opened);
+ u.onclick(2,2);u.onclick(-1,y);assert.deepEqual(emitted,[1]);assert(!u.opened);
+}
+console.log('Passed hover, pointer exit, blur dismissal without selection, reopen and selection on all selectors.');
