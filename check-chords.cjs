@@ -10,6 +10,11 @@ for(let pattern=0;pattern<4;pattern++)for(const intervals of [[0,2,4,5,7,9,11],[
  const loop=run({...c,clip:{loop_start:8,loop_end:17}},o);assert.equal(loop[0].start_time,8);
  for(const n of run(c,{...o,register:8,octaves:6}))assert(n.pitch<=127&&n.pitch>=0);
 }
+for(const [root,intervals,expected] of [[0,[0,2,4,5,7,9,11],[60,64,67]],[5,[0,2,4,5,7,9,11],[65,69,72]]]){
+ const ns=run({clip:{loop_start:0,loop_end:1},scale:{root_note:root,scale_intervals:intervals}},{segments:1,octaves:3,register:4,variation:0,density:100,motion:0});
+ assert.deepEqual(Array.from(ns,n=>n.pitch),expected);
+}
+console.log('Passed Octave 4 voicings at C4-C5 and F4-F5.');
 const p=JSON.parse(fs.readFileSync('Chord Generator.maxpat')).patcher;
 for(const {box:b} of p.boxes)if(b.presentation){const [x,y,w,h]=b.presentation_rect;assert(x>=0&&y>=0&&x+w<=152&&y+h<=147);}
 const f=fs.readFileSync('Chord Generator.amxd');assert.equal(f.readUInt32LE(28),f.length-32);assert.deepEqual(JSON.parse(f.subarray(32,-1)),{patcher:p});
@@ -21,6 +26,11 @@ for(let direction=0;direction<4;direction++){
  for(const n of ns){assert(n.duration>0&&n.start_time+n.duration<=10.13+1e-9);assert(n.velocity>=1&&n.velocity<=127);assert(n.pitch>=0&&n.pitch<=127);}
 }
 assert.equal(run(context,{...options,density:0}).length,0);
+for(const [density,count] of [[25,2],[50,3],[75,5],[100,6]]){
+ const ns=run(context,{...options,density,strum:0,motion:0});
+ const perChord={};for(const n of ns)perChord[n.start_time]=(perChord[n.start_time]||0)+1;
+ assert.equal(Object.keys(perChord).length,7);for(const total of Object.values(perChord))assert.equal(total,count);
+}
 assert.equal(new Set(run(context,{...options,strum:0}).map(n=>n.start_time)).size,7);
 console.log('Passed segments, density endpoints, strum directions, extreme voicings and velocity bounds.');
 // Dial faces, readouts and secondary controls must occupy separate rows.
@@ -94,6 +104,15 @@ for(let preset=0;preset<195;preset++)for(const intervals of [[0,2,4,5,7,9,11],[0
 }
 const changed=[];s.patcher={message(){},getnamed(name){return {message(_,v){changed.push([name,v]);}}}};s.settings.progressionMode=0;s.page(1);assert.equal(s.settings.progressionMode,0);assert(changed.some(([n,v])=>n==='browse'&&v===0));s.page(0);assert.equal(s.settings.progressionMode,0);
 console.log('Passed all 195 imported progressions, custom scales, Start bass, range bounds and page visibility.');
+const progressionOptions={progressionMode:1,preset:12,segments:3,octaves:4,density:100,register:4,start:0,variation:0,motion:0,strum:0,velocity:0,gate:100};
+function perSegment(notes){const counts={};for(const n of notes)counts[n.start_time]=(counts[n.start_time]||0)+1;return Object.values(counts);}
+assert.equal(perSegment(run(context,progressionOptions)).length,3);
+assert.equal(perSegment(run(context,{...progressionOptions,segments:7})).length,7);
+assert(perSegment(run(context,progressionOptions)).every(n=>n===4));
+assert(perSegment(run(context,{...progressionOptions,octaves:2})).every(n=>n===2));
+assert(perSegment(run(context,{...progressionOptions,density:50})).every(n=>n===2));
+assert.equal(run(context,{...progressionOptions,density:0}).length,0);
+console.log('Passed Segments, Size and Density changing the selected progression while retaining its preset.');
 const previousPreset=s.settings.preset;s.shuffle();const firstBatch=Array.from(s.tileChoices);
 assert.equal(firstBatch.length,10);assert.equal(new Set(firstBatch).size,10);
 for(const i of firstBatch){assert(i>=0&&i<s.progressionBank.length);assert(s.roman(i).length<=17);assert(!/Major|Minor|Modal| - /.test(s.roman(i)));}
@@ -172,7 +191,7 @@ assert.equal(s.settings.progressionMode,1);
 s.search(exactThree);assert.equal(s.tileChoices[0],exactIndex);
 console.log('Passed whole-degree search, exact match first, stable result tiles and applying exact search result.');
 for(const [name,value] of [['start',0],['octaves',1],['segments',4],['density',100],['register',4]]){
- s.preset(12);s.page(0);s[name](value);assert.equal(s.settings.progressionMode,0,name+' must return to random generation');
+ s.preset(12);s.page(0);s[name](value);assert.equal(s.settings.progressionMode,1,name+' must keep the selected progression');
 }
 for(const [name,value] of [['strum',30],['motion',30],['velocity',50],['pattern',1],['gate',80]]){
  s.preset(12);s.page(0);s[name](value);assert.equal(s.settings.progressionMode,1,name+' must still edit the selected progression');
@@ -181,6 +200,11 @@ s.result={parse(){}};s.context=context;
 s.preset(12);s.page(0);s.parameterChange=false;s.bang();assert.equal(s.settings.progressionMode,0);
 s.preset(12);s.page(1);s.parameterChange=false;s.bang();assert.equal(s.settings.progressionMode,1);
 console.log('Passed generator controls and Generate resetting preset mode on main page, modifier edits retaining it, and Back remaining non-generative.');
+s.preset(12);s.page(0);s.parameterChange=false;s.bang();assert.equal(s.settings.progressionMode,0);
+for(const [name,value] of [['start',1],['octaves',2],['segments',6],['density',75],['register',3],['strum',30],['motion',30],['velocity',50],['pattern',1],['gate',80]]){
+ s[name](value);assert.equal(s.settings.progressionMode,0,name+' must keep first-time generation in random mode');
+}
+console.log('Passed parameter edits keep random mode before a progression is selected.');
 s.preset(12);s.page(0);s.strum(50);assert(s.parameterChange);s.requestdone();s.bang();assert.equal(s.settings.progressionMode,0);
 console.log('Passed manual Generate after an unapplied Auto-off modifier edit.');
 s.search('');const filterPreset=s.settings.preset,filterSeed=s.phraseSeed;s.parameterChange=false;

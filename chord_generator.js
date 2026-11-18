@@ -15,18 +15,18 @@ function dictionary(name) {
 }
 function rate(v) { parameterChange = true; settings.rate = Math.max(0,Math.min(3,Math.round(v))); }
 function pattern(v) { parameterChange = true; settings.pattern = Math.max(0,Math.min(3,Math.round(v))); }
-function octaves(v) { settings.progressionMode=0; parameterChange = true; settings.octaves = Math.max(2,Math.min(6,Math.round(v)+2)); }
+function octaves(v) { parameterChange = true; settings.octaves = Math.max(2,Math.min(6,Math.round(v)+2)); }
 function variation(v) { parameterChange = true; settings.variation = Math.max(0,Math.min(100,v)); }
-function register(v) { settings.progressionMode=0; parameterChange = true; settings.register = Math.max(0,Math.min(8,Math.round(v))); }
+function register(v) { parameterChange = true; settings.register = Math.max(0,Math.min(8,Math.round(v))); }
 function gate(v) { parameterChange = true; settings.gate = Math.max(10,Math.min(100,v)); }
-function segments(v) { settings.progressionMode=0; if (!isFinite(v)) return; parameterChange=true; settings.segments=Math.max(1,Math.min(16,Math.round(v))); }
-function density(v) { settings.progressionMode=0; if (!isFinite(v)) return; parameterChange=true; settings.density=Math.max(0,Math.min(100,Math.round(v))); }
+function segments(v) { if (!isFinite(v)) return; parameterChange=true; settings.segments=Math.max(1,Math.min(16,Math.round(v))); }
+function density(v) { if (!isFinite(v)) return; parameterChange=true; settings.density=Math.max(0,Math.min(100,Math.round(v))); }
 function inversion(v) { if (!isFinite(v)) return; parameterChange=true; settings.inversion=Math.max(0,Math.min(5,Math.round(v))); }
 function spread(v) { if (!isFinite(v)) return; parameterChange=true; settings.spread=Math.max(0,Math.min(3,Math.round(v))); }
 function strum(v) { if (!isFinite(v)) return; parameterChange=true; settings.strum=Math.max(-100,Math.min(100,Math.round(v))); }
 function velocity(v) { if (!isFinite(v)) return; parameterChange=true; settings.velocity=Math.max(0,Math.min(100,Math.round(v))); }
 function direction(v) { if (!isFinite(v)) return; parameterChange=true; settings.direction=Math.max(0,Math.min(3,Math.round(v))); }
-function start(v) { settings.progressionMode=0; if (!isFinite(v)) return; parameterChange=true; settings.start=Math.max(0,Math.min(11,Math.round(v))); }
+function start(v) { if (!isFinite(v)) return; parameterChange=true; settings.start=Math.max(0,Math.min(11,Math.round(v))); }
 function motion(v) { if (!isFinite(v)) return; parameterChange=true; settings.motion=Math.max(0,Math.min(100,v)); }
 function preset(v) { if (!isFinite(v)) return; parameterChange=true; settings.progressionMode=1; settings.preset=Math.max(0,Math.min(progressionBank.length-1,Math.round(v))); if(searchMatches) this.patcher.getnamed("browse").message("set",searchMatches.indexOf(settings.preset)); }
 var tileChoices=[], searchQuery="", searchMatches=null, visiblePage=0, beforeSearchTiles=null, filterCount=4;
@@ -105,12 +105,25 @@ function page(v) {
 function prepared(c,s,intervals,start,end,root,random) {
     var motionState=Math.floor(random()*2147483646)+1;
     function motionRandom() {motionState=motionState*16807%2147483647;return (motionState-1)/2147483646;}
-    var entry=progressionBank[s.preset], source=entry.notes, firstTime=source[0][1], bass=127, i;
+    var entry=progressionBank[s.preset], original=entry.notes, chords=[], source=[], i;
+    for(i=0;i<original.length;i++) {
+        if(!chords.length || chords[chords.length-1][0][1]!==original[i][1]) chords.push([]);
+        chords[chords.length-1].push(original[i]);
+    }
+    var segmentLength=entry.length/s.segments, noteCount=s.density>0?Math.max(1,Math.round(s.octaves*s.density/100)):0;
+    for(var segment=0;segment<s.segments;segment++) {
+        var chord=chords[Math.floor(segment*chords.length/s.segments)];
+        for(var voice=0;voice<noteCount;voice++) {
+            var note=chord[Math.min(chord.length-1,Math.floor(voice*chord.length/noteCount))];
+            source.push([note[0]+12*Math.floor(voice/chord.length),segment*segmentLength,segmentLength,note[3]]);
+        }
+    }
+    var firstTime=source.length?source[0][1]:0,bass=127;
     for(i=0;i<source.length && source[i][1]===firstTime;i++) bass=Math.min(bass,source[i][0]);
     var pitches=[], scaleSize=intervals.length;
     for(var oct=-2;oct<12;oct++) for(i=0;i<scaleSize;i++) pitches.push(root+oct*12+intervals[i]);
     function nearest(p) { var best=0;for(var k=1;k<pitches.length;k++) if(Math.abs(pitches[k]-p)<Math.abs(pitches[best]-p)) best=k;return best; }
-    var origin=nearest(root+bass), target=s.register*12+root+intervals[s.start%scaleSize];
+    var origin=nearest(root+bass), target=(s.register+1)*12+root+intervals[s.start%scaleSize];
     while(target>115)target-=12;
     var targetIndex=nearest(target), result=[];
     for(i=0;i<source.length;i++) {
@@ -166,7 +179,7 @@ function generate(c, s, random) {
     function motionRandom() { motionState=motionState*16807%2147483647; return (motionState-1)/2147483646; }
     var step=(end-start)/s.segments, notes=[], previous=[], phrase=[];
     var n=intervals.length, degree=0, i, j;
-    function tone(d) { return s.register*12+root+intervals[d%n]+12*Math.floor(d/n); }
+    function tone(d) { return (s.register+1)*12+root+intervals[d%n]+12*Math.floor(d/n); }
     // Repeat a four-chord harmonic arc; variation changes harmony without changing rhythm.
     for(i=0;i<s.segments;i++) {
         var choices=i===s.segments-1?[0,Math.max(0,n-3)]:[0,Math.floor(n/2),Math.max(0,n-3),Math.max(0,n-4)];
@@ -214,9 +227,13 @@ function generate(c, s, random) {
         if(s.direction===1 || (s.direction===2 && i%2)) order.reverse();
         if(s.strum<0) order.reverse();
         if(s.direction===3) for(j=order.length-1;j>0;j--) {var k=Math.floor(random()*(j+1)), tmp=order[j];order[j]=order[k];order[k]=tmp;}
+        var selected=[], keepCount=s.density>0?Math.max(1,Math.round(chord.length*s.density/100)):0;
+        for(j=0;j<chord.length;j++) selected.push(j);
+        for(j=chord.length-1;j>0;j--) {var pickIndex=Math.floor(random()*(j+1)), swap=selected[j];selected[j]=selected[pickIndex];selected[pickIndex]=swap;}
+        selected=selected.slice(0,keepCount);
         for(j=0;j<order.length;j++) {
-            var keep=random()*100<s.density, vel=random(), delay=j*Math.abs(s.strum)/100*Math.min(0.12,step/(2*chord.length));
-            if(keep || (i===0 && order[j]===0 && s.density>0)) {
+            var keep=selected.indexOf(order[j])>=0, vel=random(), delay=j*Math.abs(s.strum)/100*Math.min(0.12,step/(2*chord.length));
+            if(keep) {
                 var cuts=[0], amount=s.motion/100, cell;
                 // Keep the bass sustained while upper voices form scale-aware melodic fragments.
                 if(order[j]!==0 && amount>0) for(cell=1;cell<8;cell++) if(motionRandom()<amount) cuts.push(cell/8);
